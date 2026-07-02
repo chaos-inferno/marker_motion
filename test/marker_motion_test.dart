@@ -652,7 +652,7 @@ void main() {
   });
 
   group('Regression', () {
-    // Bug #1: mutating and re-submitting the same Set instance (as the example
+    // Mutating and re-submitting the same Set instance (as the example
     // app's add/remove buttons do) must still surface the change.
     testWidgets('in-place Set mutation is reflected (add then remove)', (
       tester,
@@ -677,7 +677,7 @@ void main() {
       expect(_ids(rendered), {'2'});
     });
 
-    // Bug #2: on completion the marker must rest on the exact target, not a
+    // On completion the marker must rest on the exact target, not a
     // float-error approximation of it (which also prevented spurious re-animation
     // on the next identical update).
     testWidgets('animation settles on the exact target coordinates', (
@@ -709,7 +709,7 @@ void main() {
       expect(_byId(rendered, '1').position, target);
     });
 
-    // Bug #3: adding/removing/changing an unrelated marker must not reset the
+    // Adding/removing/changing an unrelated marker must not reset the
     // clock of a marker already in flight; it should still arrive on schedule.
     testWidgets('unrelated add does not reset an in-flight marker clock', (
       tester,
@@ -753,6 +753,60 @@ void main() {
       // the static marker is present and untouched.
       expect(_byId(rendered, '1').position, const LatLng(100, 0));
       expect(_byId(rendered, '2').position, const LatLng(5, 5));
+    });
+
+    // Two markers that start moving at different times must
+    // each run their own clock and therefore finish at different times.
+    testWidgets('staggered markers animate on independent clocks', (
+      tester,
+    ) async {
+      const dur = Duration(milliseconds: 1000);
+
+      Set<Marker> rendered = {};
+
+      // Both markers start at the origin.
+      await _pumpMotion(
+        tester,
+        markers: {_marker('a', 0, 0), _marker('b', 0, 0)},
+        duration: dur,
+        onBuild: (m) => rendered = m,
+      );
+
+      // 'a' starts moving; 'b' stays put.
+      await _pumpMotion(
+        tester,
+        markers: {_marker('a', 100, 0), _marker('b', 0, 0)},
+        duration: dur,
+        onBuild: (m) => rendered = m,
+      );
+
+      await tester.pump(const Duration(milliseconds: 500)); // a ~halfway
+      expect(_byId(rendered, 'a').position.latitude, greaterThan(0));
+      expect(_byId(rendered, 'a').position.latitude, lessThan(100));
+      expect(_byId(rendered, 'b').position, const LatLng(0, 0));
+
+      // 'b' starts moving 500ms after 'a'; 'a' keeps its original target and
+      // must not have its clock reset.
+      await _pumpMotion(
+        tester,
+        markers: {_marker('a', 100, 0), _marker('b', 0, 100)},
+        duration: dur,
+        onBuild: (m) => rendered = m,
+      );
+
+      // At ~1000ms total, 'a' (started at 0ms) has arrived; 'b' (started at
+      // ~500ms) is only about halfway.
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(_byId(rendered, 'a').position, const LatLng(100, 0));
+      final bLng = _byId(rendered, 'b').position.longitude;
+      expect(bLng, greaterThan(0));
+      expect(bLng, lessThan(100));
+
+      // ~500ms later 'b' completes too, and 'a' has not drifted off target.
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(_byId(rendered, 'a').position, const LatLng(100, 0));
+      expect(_byId(rendered, 'b').position, const LatLng(0, 100));
+      expect(tester.takeException(), isNull);
     });
   });
 }
