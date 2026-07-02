@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -61,7 +62,7 @@ class _MarkerMotionAnimationState extends State<MarkerMotionAnimation>
   late AnimationController _controller;
 
   /// Applies the specified [animationCurve] to the animation progress.
-  late Animation<double> _curvedAnimation;
+  late CurvedAnimation _curvedAnimation;
 
   @override
   void initState() {
@@ -93,10 +94,15 @@ class _MarkerMotionAnimationState extends State<MarkerMotionAnimation>
 
     // Update the animation curve if it's changed
     if (widget.animationCurve != oldWidget.animationCurve) {
+      _curvedAnimation.dispose();
       _curvedAnimation = CurvedAnimation(
         parent: _controller,
         curve: widget.animationCurve,
       );
+    }
+
+    if (setEquals(widget.markers, oldWidget.markers)) {
+      return;
     }
 
     // Clear everything and return early if no markers are provided
@@ -176,6 +182,7 @@ class _MarkerMotionAnimationState extends State<MarkerMotionAnimation>
 
   @override
   void dispose() {
+    _curvedAnimation.dispose();
     _controller.dispose();
 
     super.dispose();

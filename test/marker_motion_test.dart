@@ -258,6 +258,49 @@ void main() {
         expect(_byId(rendered, '1').position, const LatLng(20, 0));
       });
 
+      testWidgets('unchanged targets do not stall in-flight animation ($label)', (
+        tester,
+      ) async {
+        final initial = {_marker('1', 0, 0)};
+        Set<Marker> target() => {_marker('1', 10, 0)};
+
+        Set<Marker> rendered = {};
+
+        await _pumpMotion(
+          tester,
+          markers: initial,
+          implementation: implementation,
+          duration: const Duration(milliseconds: 1000),
+          onBuild: (markers) => rendered = markers,
+        );
+
+        await _pumpMotion(
+          tester,
+          markers: target(),
+          implementation: implementation,
+          duration: const Duration(milliseconds: 1000),
+          onBuild: (markers) => rendered = markers,
+        );
+
+        // The parent keeps rebuilding with identical target content (a fresh
+        // Set instance each time) while the animation runs. This must not
+        // restart the animation; the marker must still settle on target.
+        for (var i = 0; i < 30; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+          await _pumpMotion(
+            tester,
+            markers: target(),
+            implementation: implementation,
+            duration: const Duration(milliseconds: 1000),
+            onBuild: (markers) => rendered = markers,
+          );
+        }
+
+        // 30 * 50ms = 1500ms elapsed, well past the 1000ms duration.
+        expect(_byId(rendered, '1').position, const LatLng(10, 0));
+        expect(tester.takeException(), isNull);
+      });
+
       testWidgets('transition to empty clears markers ($label)', (
         tester,
       ) async {
