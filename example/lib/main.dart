@@ -137,7 +137,7 @@ class _MapScreenState extends State<MapScreen> {
                     setState(() {
                       // Remove a random marker
                       final marker = _markers.elementAt(
-                        _random.nextInt(_markers.length - 1),
+                        _random.nextInt(_markers.length),
                       );
 
                       _markers.remove(marker);
