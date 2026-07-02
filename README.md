@@ -16,6 +16,8 @@ Animate markers in Google maps from one position to another smoothly using this 
 Using MarkerMotion is as simple as wrapping your Google Maps widget with the `MarkerMotion` widget:
 
 ```dart
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:marker_motion/marker_motion.dart';
@@ -44,10 +46,10 @@ class _MapScreenState extends State<MapScreen> {
         // Builder receives the animated markers that you can then pass to your
         // GoogleMap to animate them
         builder: (markers) {
-            GoogleMap(
-              markers: markers,
-            );
-        }
+          return GoogleMap(
+            markers: markers,
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _updateMarkerPositions,
