@@ -1,3 +1,19 @@
+## 0.2.0
+
+This release removes the timer-based implementation to focus on a single, reliable
+animation path, and fixes several correctness issues.
+
+- **Breaking:** Removed the `Timer`-based animation implementation, the
+  `MotionImplementation` enum, and the `implementation` and `frameRate` fields on
+  `MarkerMotionConfig`. Configure animations with `duration` and `animationCurve` only.
+- Fixed markers not updating when the same `Set` instance is mutated in place and
+  re-submitted (for example, adding or removing a marker without allocating a new set).
+- Fixed animated markers settling a hair off their target due to floating-point error;
+  markers now snap to the exact target position when the animation completes.
+- Fixed in-flight animations restarting whenever any other marker was added, removed, or
+  changed. Each marker now animates on its own independent clock, so unrelated updates no
+  longer disturb markers already in motion.
+
 ## 0.1.4
 
 This release focuses on making marker updates more efficient and the package more reliable.

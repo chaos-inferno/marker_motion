@@ -3,13 +3,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:marker_motion/src/marker_motion_config.dart';
 
 import 'marker_motion_animation.dart';
-import 'marker_motion_timer.dart';
-
-/// Defines the animation implementation for [MarkerMotion].
-///
-/// - [animation]: Uses an [AnimationController] for smooth, curve-based transitions.
-/// - [timer]: Uses a [Timer] for step-based updates, offering a simpler alternative.
-enum MotionImplementation { animation, timer }
 
 /// A widget that smoothly animates Google Maps markers between two positions.
 ///
@@ -22,7 +15,9 @@ enum MotionImplementation { animation, timer }
 /// ```dart
 /// MarkerMotion(
 ///   markers: mapMarkers, // Set of Marker objects to animate
-///   duration: const Duration(milliseconds: 5200),
+///   config: const MarkerMotionConfig(
+///     duration: Duration(milliseconds: 5200),
+///   ),
 ///   builder: (markers) {
 ///     return GoogleMap(
 ///       markers: markers,
@@ -56,21 +51,11 @@ class MarkerMotion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    switch (config.implementation) {
-      case MotionImplementation.animation:
-        return MarkerMotionAnimation(
-          markers: markers,
-          builder: builder,
-          duration: config.duration,
-          animationCurve: config.animationCurve,
-        );
-      case MotionImplementation.timer:
-        return MarkerMotionTimer(
-          markers: markers,
-          builder: builder,
-          duration: config.duration,
-          frameRate: config.frameRate,
-        );
-    }
+    return MarkerMotionAnimation(
+      markers: markers,
+      builder: builder,
+      duration: config.duration,
+      animationCurve: config.animationCurve,
+    );
   }
 }

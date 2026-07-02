@@ -1,7 +1,7 @@
 name: marker_motion
 description: A flutter package that smoothly animates Google Maps markers between two positions
-version: 0.1.4
-repository: https://github.com/chaosinfernohq/marker_motion
+version: 0.2.0
+repository: https://github.com/chaos-inferno/marker_motion
 
 environment:
   sdk: ^3.11.0
@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  google_maps_flutter: ^2.10.1
+  google_maps_flutter: ^2.17.1
 
 dev_dependencies:
   flutter_test:

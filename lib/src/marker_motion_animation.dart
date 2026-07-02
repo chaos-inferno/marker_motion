@@ -1,13 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'animated_marker.dart';
 
 /// The animation implementation for [MarkerMotion].
 class MarkerMotionAnimation extends StatefulWidget {
-  /// Creates a [MarkerMotionAnimation] widget to animate Google Maps markers using
-  /// and animation controller.
+  /// Creates a [MarkerMotionAnimation] widget to animate Google Maps markers.
   ///
   /// The [markers] parameter specifies the current set of markers to display and animate.
   /// When this set updates, markers with matching [MarkerId]s will animate to their new
@@ -52,139 +52,183 @@ class MarkerMotionAnimation extends StatefulWidget {
 /// The state class managing the animation logic for [MarkerMotion].
 class _MarkerMotionAnimationState extends State<MarkerMotionAnimation>
     with SingleTickerProviderStateMixin {
-  /// The current set of markers displayed on the map, including those being animated.
+  /// The current set of markers displayed on the map, including those animating.
   Set<Marker> _displayMarkers = {};
 
-  /// Tracks markers currently being animated, storing their start and end positions.
+  /// A snapshot of the most recently applied target set.
+  ///
+  /// Change detection compares incoming markers against this snapshot rather
+  /// than `oldWidget.markers`, so callers that mutate and re-submit the same
+  /// [Set] instance are still handled correctly.
+  Set<Marker> _lastTarget = {};
+
+  /// Markers currently animating, keyed by id. Each entry carries its own
+  /// start/end positions and start time, giving every marker an independent
+  /// animation clock.
   final Map<MarkerId, AnimatedMarker> _animatedMarkers = {};
 
-  /// Controls the animation timing for all marker movements.
-  late AnimationController _controller;
+  /// Drives per-frame position updates while any marker is animating.
+  late final Ticker _ticker;
 
-  /// Applies the specified [animationCurve] to the animation progress.
-  late CurvedAnimation _curvedAnimation;
+  /// The latest elapsed time reported by [_ticker] for the current run.
+  Duration _elapsed = Duration.zero;
 
   @override
   void initState() {
     super.initState();
-    // Start with the initial set of markers
+    // Start with the initial set of markers.
     _displayMarkers = Set<Marker>.from(widget.markers);
-
-    // Set up the animation controller with the specified duration
-    _controller = AnimationController(vsync: this, duration: widget.duration);
-
-    // Apply the animation curve to the controller’s progress
-    _curvedAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: widget.animationCurve,
-    );
-
-    // Listen for animation updates to reposition markers
-    _controller.addListener(_updateAnimations);
+    _lastTarget = Set<Marker>.from(widget.markers);
+    _ticker = createTicker(_onTick);
   }
 
   @override
   void didUpdateWidget(covariant MarkerMotionAnimation oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Update animation settings if they’ve changed
-    if (widget.duration != oldWidget.duration) {
-      _controller.duration = widget.duration;
-    }
-
-    // Update the animation curve if it's changed
-    if (widget.animationCurve != oldWidget.animationCurve) {
-      _curvedAnimation.dispose();
-      _curvedAnimation = CurvedAnimation(
-        parent: _controller,
-        curve: widget.animationCurve,
-      );
-    }
-
-    if (setEquals(widget.markers, oldWidget.markers)) {
+    // Detect changes against our own snapshot rather than oldWidget.markers, so
+    // callers that mutate and re-submit the same Set instance are handled.
+    // Duration and curve are read live in _updateAnimations, so runtime changes
+    // to them apply automatically without needing to be handled here.
+    if (setEquals(widget.markers, _lastTarget)) {
       return;
     }
+    _lastTarget = Set<Marker>.from(widget.markers);
 
-    // Clear everything and return early if no markers are provided
+    // Clear everything and stop if no markers are provided.
     if (widget.markers.isEmpty) {
       _animatedMarkers.clear();
+      _ticker.stop();
       setState(() => _displayMarkers = {});
       return;
     }
 
-    // Identify markers that need animation by comparing old and new positions
     final newMarkersById = <MarkerId, Marker>{
       for (final marker in widget.markers) marker.markerId: marker,
     };
+    final currentDisplayById = <MarkerId, Marker>{
+      for (final marker in _displayMarkers) marker.markerId: marker,
+    };
 
-    _animatedMarkers.clear();
-    for (final oldMarker in _displayMarkers) {
-      final newMarker = newMarkersById[oldMarker.markerId];
+    // Legs started during this pass are timed from the current clock value.
+    // When the ticker is idle there are no in-flight markers, so a fresh run
+    // begins from zero.
+    final now = _ticker.isActive ? _elapsed : Duration.zero;
 
-      // Skip markers that were removed or haven’t changed position
-      if (newMarker == null || oldMarker.position == newMarker.position) {
+    for (final newMarker in widget.markers) {
+      final id = newMarker.markerId;
+      final currentPos = currentDisplayById[id]?.position;
+
+      // Brand-new marker (no current position) or already at its target:
+      // nothing to animate.
+      if (currentPos == null || currentPos == newMarker.position) {
+        _animatedMarkers.remove(id);
         continue;
       }
 
-      // Queue the marker for animation with its start and end positions
-      _animatedMarkers[oldMarker.markerId] = AnimatedMarker(
-        start: oldMarker.position,
-        end: newMarker.position,
-        marker: newMarker,
-      );
+      final existing = _animatedMarkers[id];
+      if (existing != null && existing.end == newMarker.position) {
+        // Target unchanged (some other marker or a non-position field changed):
+        // keep this marker's clock running and just refresh its fields.
+        _animatedMarkers[id] = AnimatedMarker(
+          start: existing.start,
+          end: existing.end,
+          marker: newMarker,
+          startedAt: existing.startedAt,
+        );
+      } else {
+        // Newly moving or retargeted: start a fresh leg from the current
+        // on-screen position on its own clock.
+        _animatedMarkers[id] = AnimatedMarker(
+          start: currentPos,
+          end: newMarker.position,
+          marker: newMarker,
+          startedAt: now,
+        );
+      }
     }
 
-    // Update the display set: keep animating markers, add non-animating ones
+    // Drop animations for markers that are no longer present.
+    _animatedMarkers.removeWhere((id, _) => !newMarkersById.containsKey(id));
+
+    // Assemble the display set: animating markers keep their current on-screen
+    // position (refreshed on the next tick); everything else is taken as-is.
     _displayMarkers = {
       ..._displayMarkers.where((m) => _animatedMarkers.containsKey(m.markerId)),
       ...widget.markers.where((m) => !_animatedMarkers.containsKey(m.markerId)),
     };
 
-    // Start the animation if there are markers to animate
-    if (_animatedMarkers.isNotEmpty) {
-      _controller.forward(from: 0.0);
+    if (_animatedMarkers.isEmpty) {
+      _ticker.stop();
+    } else if (!_ticker.isActive) {
+      _elapsed = Duration.zero;
+      _ticker.start();
     }
   }
 
-  /// Updates marker positions based on the current animation progress.
+  void _onTick(Duration elapsed) {
+    _elapsed = elapsed;
+    _updateAnimations();
+  }
+
+  /// Recomputes marker positions from each marker’s independent clock.
   void _updateAnimations() {
     if (_animatedMarkers.isEmpty) return;
 
+    final curve = widget.animationCurve;
+    final durationMicros = widget.duration.inMicroseconds;
+
     final updatedMarkers = <Marker>{};
 
-    // Save markers that aren’t being animated
+    // Keep markers that aren’t animating unchanged.
     for (final marker in _displayMarkers) {
       if (!_animatedMarkers.containsKey(marker.markerId)) {
         updatedMarkers.add(marker);
       }
     }
 
-    // Interpolate positions for animating markers
-    for (final animatedMarker in _animatedMarkers.values) {
-      final position = animatedMarker.lerp(_curvedAnimation.value);
+    // Interpolate positions for animating markers, each on its own clock.
+    final completed = <MarkerId>[];
+    for (final entry in _animatedMarkers.entries) {
+      final animatedMarker = entry.value;
+      final elapsedMicros =
+          (_elapsed - animatedMarker.startedAt).inMicroseconds;
 
-      // Update the marker with its new interpolated position
+      final t = durationMicros <= 0
+          ? 1.0
+          : (elapsedMicros / durationMicros).clamp(0.0, 1.0);
+
+      final LatLng position;
+      if (t >= 1.0) {
+        // Snap to the exact target so the marker settles precisely on it.
+        position = animatedMarker.end;
+        completed.add(entry.key);
+      } else {
+        position = animatedMarker.lerp(curve.transform(t));
+      }
+
       updatedMarkers.add(
         animatedMarker.marker.copyWith(positionParam: position),
       );
     }
 
-    // Update the displayed markers and trigger a rebuild
-    setState(() {
-      _displayMarkers = updatedMarkers;
-    });
+    // Clean up completed animations.
+    for (final id in completed) {
+      _animatedMarkers.remove(id);
+    }
 
-    // Clean up completed animations
-    if (_controller.status == AnimationStatus.completed) {
-      _animatedMarkers.clear();
+    // Update the displayed markers and trigger a rebuild.
+    setState(() => _displayMarkers = updatedMarkers);
+
+    // Stop ticking once every marker has settled.
+    if (_animatedMarkers.isEmpty) {
+      _ticker.stop();
     }
   }
 
   @override
   void dispose() {
-    _curvedAnimation.dispose();
-    _controller.dispose();
-
+    _ticker.dispose();
     super.dispose();
   }
 

@@ -9,7 +9,7 @@ Animate markers in Google maps from one position to another smoothly using this 
 
 - Automatically animate marker positions passed into the MarkerMotion widget that share a marker id
 - Customize the animation duration
-- Choose between an animation controller and timer based implementation depending on your needs
+- Customize the animation curve
 
 ## Usage
 
@@ -77,8 +77,8 @@ class _MapScreenState extends State<MapScreen> {
 ## How It Works
 
 The `MarkerMotion` widget keeps track of marker positions between state changes. When a marker's
-position changes, it smoothly animates from the old position to the new position using either 
-an animation controller or a timer based animation.
+position changes, it smoothly animates from the old position to the new position using an
+animation controller.
 
 ## Customization
 
@@ -96,10 +96,8 @@ The following config options are currently supported:
 
 | name | type | default | options | description |
 |:-----|:-----|:--------|:--------|:------------|
-| implementation | MotionImplementation | MotionImplementation.animation | MotionImplementation.animation, MotionImplementation.timer | Determines whether to use an animation controller or timer to driver your marker animations |
-| duration | Duration | Duration(milliseconds: 3200) | Any duration | The duration that your animation should run for. This setting applies to both implementations.
-| animationCurve | Curve | Curves.linear | Any animation curve | The animation curve to use when animating your markers. Only set this if you're using MotionImplementation.animation. |
-| frameRate | int | 60 | 1 - 120 | The frame rate you want to run your animation at. This determines how often the marker's position will be updated. Only use the if you're using MotionImplementation.timer. |
+| duration | Duration | Duration(milliseconds: 3200) | Any duration | The duration that your animation should run for. |
+| animationCurve | Curve | Curves.linear | Any animation curve | The animation curve to use when animating your markers. |
 
 ## Contributing
 

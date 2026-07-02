@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -99,14 +98,9 @@ class _MapScreenState extends State<MapScreen> {
         // Pass current markers
         markers: _markers,
         // Pass animation options to widget using config object
-        config: MarkerMotionConfig(
+        config: const MarkerMotionConfig(
           // Set animation duration (adjust as needed)
-          duration: const Duration(milliseconds: 4300),
-          // Set implementation
-          implementation:
-              Platform.isIOS
-                  ? MotionImplementation.animation
-                  : MotionImplementation.timer,
+          duration: Duration(milliseconds: 4300),
         ),
         // Builder receives animated markers
         builder: (animatedMarkers) {
